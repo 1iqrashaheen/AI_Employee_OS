@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task Manager</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1b1f27; --muted: #6a7280; --line: #e2e5ea;
+    --accent: #2f5fd0; --accent-text: #ffffff;
+    --red: #c0392b; --red-bg: #fdecea; --amber: #a86400; --amber-bg: #fff3dc;
+    --blue: #2f5fd0; --blue-bg: #e8effc; --green: #1f7a45; --green-bg: #e3f4ea; --gray-bg: #eceef1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a; --card: #1d2026; --text: #e8eaee; --muted: #9aa2af; --line: #2d323b;
+      --accent: #6c93f0; --accent-text: #101319;
+      --red: #ff8b7d; --red-bg: #3a1f1c; --amber: #f0b45a; --amber-bg: #3a2d14;
+      --blue: #8fb0f5; --blue-bg: #1f2a44; --green: #6fd09a; --green-bg: #17301f; --gray-bg: #292d35;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 0 0 10px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+          padding: 16px; margin-bottom: 16px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .grow { flex: 1 1 200px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 3px; }
+  input, select, textarea, button { font: inherit; color: var(--text); }
+  input, select, textarea { background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+                            padding: 7px 9px; width: 100%; }
+  textarea { resize: vertical; min-height: 56px; }
+  button { background: var(--card); border: 1px solid var(--line); border-radius: 6px;
+           padding: 7px 12px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  button.danger { color: var(--red); }
+  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 1px; }
+  .bar { height: 12px; background: var(--gray-bg); border-radius: 6px; overflow: hidden; margin: 8px 0; }
+  .bar > div { height: 100%; background: var(--green); width: 0; transition: width .3s; }
+  .stats { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip { padding: 2px 10px; border-radius: 99px; font-size: 13px; background: var(--gray-bg); }
+  .chip.red { background: var(--red-bg); color: var(--red); }
+  .chip.amber { background: var(--amber-bg); color: var(--amber); }
+  .chip.blue { background: var(--blue-bg); color: var(--blue); }
+  .chip.green { background: var(--green-bg); color: var(--green); }
+  .reminder { display: flex; gap: 10px; align-items: baseline; padding: 6px 0;
+              border-top: 1px solid var(--line); }
+  .reminder:first-of-type { border-top: 0; }
+  .empty { color: var(--muted); padding: 8px 0; }
+  .task { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: start;
+          padding: 12px 0; border-top: 1px solid var(--line); }
+  .task:first-child { border-top: 0; }
+  .task.done .title { text-decoration: line-through; color: var(--muted); }
+  .task input[type=checkbox] { width: 18px; height: 18px; margin-top: 3px; }
+  .title { font-weight: 600; }
+  .meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; font-size: 13px; color: var(--muted); }
+  .actions { display: flex; gap: 6px; align-items: center; }
+  .actions select { width: auto; }
+  #form-card[hidden] { display: none; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+  .err { color: var(--red); font-size: 13px; margin-top: 8px; min-height: 18px; }
+  .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--text);
+           color: var(--bg); padding: 8px 14px; border-radius: 8px; opacity: 0; transition: opacity .2s;
+           pointer-events: none; }
+  .toast.show { opacity: 1; }
+  @media (max-width: 600px) { .task { grid-template-columns: auto 1fr; } .actions { grid-column: 2; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Task Manager</h1>
+  <p class="sub">Create, assign and complete tasks. Reminders show what is overdue or due soon.</p>
+
+  <section class="card" aria-label="Progress">
+    <div class="row" style="justify-content: space-between">
+      <h2 style="margin:0">Progress</h2>
+      <span id="percent" style="font-weight:600">0%</span>
+    </div>
+    <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="bar"><div id="bar-fill"></div></div>
+    <div class="stats" id="stats"></div>
+  </section>
+
+  <section class="card" aria-label="Reminders">
+    <h2>Reminders</h2>
+    <div id="reminders"></div>
+  </section>
+
+  <section class="card" id="form-card" hidden>
+    <h2 id="form-title">New task</h2>
+    <form id="form" novalidate>
+      <div class="grid">
+        <div style="grid-column: 1 / -1"><label for="f-title">Title *</label>
+          <input id="f-title" maxlength="200" required></div>
+        <div style="grid-column: 1 / -1"><label for="f-desc">Description</label>
+          <textarea id="f-desc"></textarea></div>
+        <div><label for="f-priority">Priority</label>
+          <select id="f-priority"><option>low</option><option selected>medium</option><option>high</option><option>urgent</option></select></div>
+        <div><label for="f-status">Status</label>
+          <select id="f-status"><option value="todo">to do</option><option value="in_progress">in progress</option><option value="done">done</option><option value="cancelled">cancelled</option></select></div>
+        <div><label for="f-assignee">Assigned to</label>
+          <select id="f-assignee"><option value="">Unassigned</option></select></div>
+        <div><label for="f-due">Due date</label><input id="f-due" type="datetime-local"></div>
+        <div><label for="f-remind">Remind me at</label><input id="f-remind" type="datetime-local"></div>
+      </div>
+      <div class="err" id="form-error" role="alert"></div>
+      <div class="row" style="margin-top:8px">
+        <button class="primary" type="submit" id="save">Save task</button>
+        <button type="button" id="cancel">Cancel</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="card" aria-label="Tasks">
+    <div class="row" style="margin-bottom:12px">
+      <h2 style="margin:0" class="grow">Tasks</h2>
+      <button class="primary" id="new">+ New task</button>
+    </div>
+    <div class="row" style="margin-bottom:8px">
+      <div class="grow"><label for="q">Search</label><input id="q" type="search" placeholder="Search title or description"></div>
+      <div><label for="s-status">Status</label>
+        <select id="s-status"><option value="">All</option><option value="todo">to do</option><option value="in_progress">in progress</option><option value="done">done</option><option value="cancelled">cancelled</option></select></div>
+      <div><label for="s-priority">Priority</label>
+        <select id="s-priority"><option value="">All</option><option>urgent</option><option>high</option><option>medium</option><option>low</option></select></div>
+      <div><label for="s-assignee">Assignee</label>
+        <select id="s-assignee"><option value="">Everyone</option></select></div>
+      <div><label for="s-sort">Sort</label>
+        <select id="s-sort"><option value="due_date">Due date</option><option value="priority">Priority</option><option value="-created_at">Newest</option></select></div>
+      <div style="padding-top:18px"><label style="display:flex;gap:6px;align-items:center;margin:0">
+        <input type="checkbox" id="s-overdue" style="width:auto"> Overdue only</label></div>
+    </div>
+    <div id="list"></div>
+  </section>
+</main>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+const API = "/api/v1";
+const $ = (id) => document.getElementById(id);
+let assignees = [];
+let editingId = null;
+
+// Build elements without innerHTML so task text can never be run as HTML.
+function el(tag, props = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === "class") node.className = v; else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+    else node.setAttribute(k, v);
+  }
+  for (const c of children) node.append(c);
+  return node;
+}
+
+async function api(path, options = {}) {
+  const res = await fetch(API + path, {
+    headers: { "Content-Type": "application/json" }, ...options,
+  });
+  const body = await res.json();
+  if (!res.ok || body.success === false) {
+    const detail = (body.errors || []).map((e) => `${e.field}: ${e.message}`).join("; ");
+    throw new Error(detail || body.message || "Request failed");
+  }
+  return body;
+}
+
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2200);
+}
+
+const fmt = (iso) => iso ? new Date(iso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "";
+const toLocalInput = (iso) => {
+  if (!iso) return "";
+  const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 16);
+};
+const fromLocalInput = (v) => v ? new Date(v).toISOString() : null;
+const label = (s) => s.replace("_", " ");
+const priorityClass = { urgent: "red", high: "amber", medium: "blue", low: "" };
+
+// ---- progress -------------------------------------------------------------
+async function loadProgress() {
+  const { data } = await api("/tasks/progress");
+  $("percent").textContent = data.completed_percent + "%";
+  $("bar-fill").style.width = data.completed_percent + "%";
+  $("bar").setAttribute("aria-valuenow", data.completed_percent);
+  const s = $("stats"); s.replaceChildren(
+    el("span", { class: "chip" }, `${data.total} tasks`),
+    el("span", { class: "chip" }, `${data.by_status.todo} to do`),
+    el("span", { class: "chip blue" }, `${data.by_status.in_progress} in progress`),
+    el("span", { class: "chip green" }, `${data.by_status.done} done`),
+    el("span", { class: "chip red" }, `${data.overdue} overdue`),
+    el("span", { class: "chip amber" }, `${data.due_soon} due soon`),
+  );
+}
+
+// ---- reminders ------------------------------------------------------------
+async function loadReminders() {
+  const { data } = await api("/tasks/reminders");
+  const box = $("reminders");
+  if (!data.length) { box.replaceChildren(el("div", { class: "empty" }, "Nothing needs attention right now.")); return; }
+  const kind = { overdue: ["red", "Overdue"], due_soon: ["amber", "Due soon"], reminder: ["blue", "Reminder"] };
+  box.replaceChildren(...data.map((r) => el("div", { class: "reminder" },
+    el("span", { class: "chip " + kind[r.reminder_type][0] }, kind[r.reminder_type][1]),
+    el("span", { class: "grow" }, el("strong", {}, r.task.title), ` — ${r.message}`),
+    el("span", { class: "meta", style: "margin:0" }, r.task.assignee_name || "Unassigned"),
+  )));
+}
+
+// ---- list -----------------------------------------------------------------
+async function loadList() {
+  const p = new URLSearchParams({ limit: "100", sort: $("s-sort").value });
+  if ($("q").value.trim()) p.set("search", $("q").value.trim());
+  if ($("s-status").value) p.set("status", $("s-status").value);
+  if ($("s-priority").value) p.set("priority", $("s-priority").value);
+  if ($("s-assignee").value) p.set("assignee_id", $("s-assignee").value);
+  if ($("s-overdue").checked) p.set("overdue", "true");
+  const { data } = await api("/tasks?" + p);
+  const list = $("list");
+  if (!data.length) { list.replaceChildren(el("div", { class: "empty" }, "No tasks match.")); return; }
+  list.replaceChildren(...data.map(renderTask));
+}
+
+function renderTask(t) {
+  const box = el("input", { type: "checkbox", "aria-label": "Mark done: " + t.title });
+  box.checked = t.status === "done";
+  box.disabled = t.status === "cancelled";
+  box.addEventListener("change", () => patch(t.id, { status: box.checked ? "done" : "todo" }));
+
+  const statusSel = el("select", { "aria-label": "Status" });
+  for (const s of ["todo", "in_progress", "done", "cancelled"]) {
+    const o = el("option", { value: s }, label(s)); if (s === t.status) o.selected = true; statusSel.append(o);
+  }
+  statusSel.addEventListener("change", () => patch(t.id, { status: statusSel.value }));
+
+  const meta = el("div", { class: "meta" },
+    el("span", { class: "chip " + priorityClass[t.priority] }, t.priority),
+    el("span", {}, t.assignee_name ? "Assigned to " + t.assignee_name : "Unassigned"),
+  );
+  if (t.due_date) meta.append(el("span", { class: t.is_overdue ? "chip red" : "" }, (t.is_overdue ? "Overdue · " : "Due ") + fmt(t.due_date)));
+  if (t.completed_at) meta.append(el("span", {}, "Completed " + fmt(t.completed_at)));
+
+  return el("div", { class: "task " + t.status },
+    box,
+    el("div", {}, el("div", { class: "title" }, t.title),
+      t.description ? el("div", { class: "meta" }, t.description) : "", meta),
+    el("div", { class: "actions" }, statusSel,
+      el("button", { onclick: () => openForm(t) }, "Edit"),
+      el("button", { class: "danger", onclick: () => remove(t) }, "Delete")),
+  );
+}
+
+// ---- actions --------------------------------------------------------------
+async function refresh() { await Promise.all([loadProgress(), loadReminders(), loadList()]); }
+
+async function patch(id, changes) {
+  try { await api("/tasks/" + id, { method: "PATCH", body: JSON.stringify(changes) }); await refresh(); }
+  catch (e) { toast(e.message); await refresh(); }
+}
+
+async function remove(t) {
+  if (!confirm(`Delete "${t.title}"?`)) return;
+  try { await api("/tasks/" + t.id, { method: "DELETE" }); toast("Task deleted"); await refresh(); }
+  catch (e) { toast(e.message); }
+}
+
+function openForm(task) {
+  editingId = task ? task.id : null;
+  $("form-title").textContent = task ? "Edit task" : "New task";
+  $("f-title").value = task ? task.title : "";
+  $("f-desc").value = task && task.description ? task.description : "";
+  $("f-priority").value = task ? task.priority : "medium";
+  $("f-status").value = task ? task.status : "todo";
+  $("f-assignee").value = task && task.assignee_id ? task.assignee_id : "";
+  $("f-due").value = task ? toLocalInput(task.due_date) : "";
+  $("f-remind").value = task ? toLocalInput(task.remind_at) : "";
+  $("form-error").textContent = "";
+  $("form-card").hidden = false;
+  $("f-title").focus();
+}
+const closeForm = () => { $("form-card").hidden = true; editingId = null; };
+
+$("form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const body = {
+    title: $("f-title").value,
+    description: $("f-desc").value.trim() || null,
+    priority: $("f-priority").value,
+    status: $("f-status").value,
+    assignee_id: $("f-assignee").value || null,
+    due_date: fromLocalInput($("f-due").value),
+    remind_at: fromLocalInput($("f-remind").value),
+  };
+  try {
+    await api(editingId ? "/tasks/" + editingId : "/tasks",
+      { method: editingId ? "PATCH" : "POST", body: JSON.stringify(body) });
+    closeForm(); toast(editingId ? "Task updated" : "Task created"); await refresh();
+  } catch (e) { $("form-error").textContent = e.message; }
+});
+
+$("new").addEventListener("click", () => openForm(null));
+$("cancel").addEventListener("click", closeForm);
+for (const id of ["s-status", "s-priority", "s-assignee", "s-sort", "s-overdue"]) $(id).addEventListener("change", loadList);
+let timer; $("q").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(loadList, 250); });
+
+(async function init() {
+  try {
+    ({ data: assignees } = await api("/assignees"));
+    for (const a of assignees) {
+      $("f-assignee").append(el("option", { value: a.id }, a.full_name));
+      $("s-assignee").append(el("option", { value: a.id }, a.full_name));
+    }
+    await refresh();
+  } catch (e) { toast(e.message); }
+  setInterval(() => { loadReminders().catch(() => {}); loadProgress().catch(() => {}); }, 60000);
+})();
+</script>
+</body>
+</html>
