@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, String, text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -25,6 +25,12 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Boolean, nullable=False, server_default=text("true")
     )
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # Bumped when the password changes. Every token carries the version it was issued
+    # with, so bumping it instantly invalidates all older tokens of this user.
+    token_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
 
     __table_args__ = (
         CheckConstraint("role IN ('admin','manager','member')", name="role_valid"),
