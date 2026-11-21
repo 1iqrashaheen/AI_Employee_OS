@@ -20,7 +20,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import service
 from .schemas import ListFilters, TaskCreate, TaskUpdate, TaskPriority, TaskStatus
-from .store import AppError, TaskStore, seed_sample_data
+from .store import AppError, JsonFileTaskStore, TaskStore, seed_sample_data
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -52,7 +52,7 @@ def create_app(
     app = FastAPI(title="AI Employee OS - Task Manager", version="0.1.0")
     app.state.store = store or TaskStore()
     app.state.now_fn = now_fn
-    if seed:
+    if seed and not app.state.store.all():  # never add samples on top of saved tasks
         seed_sample_data(app.state.store, now_fn())
 
     def get_store(request: Request) -> TaskStore:
@@ -188,5 +188,10 @@ def create_app(
     return app
 
 
-# `uvicorn app.main:app` starts with sample tasks unless TASK_MANAGER_SEED=0
-app = create_app(seed=os.getenv("TASK_MANAGER_SEED", "1") == "1")
+# `uvicorn app.main:app` starts with sample tasks unless TASK_MANAGER_SEED=0.
+# Set TASK_MANAGER_FILE=tasks.json to keep tasks between restarts.
+_data_file = os.getenv("TASK_MANAGER_FILE")
+app = create_app(
+    store=JsonFileTaskStore(_data_file) if _data_file else None,
+    seed=os.getenv("TASK_MANAGER_SEED", "1") == "1",
+)

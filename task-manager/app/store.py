@@ -6,7 +6,10 @@ shared storage later). Everything else in the module only talks to the small
 ``TaskStore`` interface below, so the final step is to write a second class with
 the same methods that reads and writes Hadeed's ``tasks`` table.
 """
+import json
+import os
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Dict, List, Optional
 from uuid import UUID, uuid4
 
@@ -60,6 +63,61 @@ class TaskStore:
     def save(self, task: Task) -> Task:
         self._tasks[task.id] = task
         return task
+
+
+class JsonFileTaskStore(TaskStore):
+    """Same as ``TaskStore`` but saved to a JSON file, so tasks survive a restart.
+
+    Meant for demos before the shared database is connected. The file is loaded
+    when the store is created and rewritten after every change. A write failure
+    raises an error (it is never ignored), and the file is replaced in one step so
+    a crash cannot leave it half-written.
+    """
+
+    def __init__(self, path, assignees: Optional[List[Assignee]] = None):
+        super().__init__(assignees)
+        self.path = Path(path)
+        self._load()
+
+    def _load(self) -> None:
+        if not self.path.exists():
+            return
+        try:
+            rows = json.loads(self.path.read_text(encoding="utf-8"))
+            for row in rows:
+                task = Task.model_validate(row)
+                task.deleted_at = _parse_dt(row.get("deleted_at"))
+                self._tasks[task.id] = task
+        except (OSError, ValueError, TypeError, KeyError) as exc:
+            raise RuntimeError(f"Could not read task file {self.path}: {exc}") from exc
+
+    def _write(self) -> None:
+        rows = []
+        for task in self._tasks.values():
+            row = task.model_dump(mode="json")  # deleted_at is left out of normal output
+            row["deleted_at"] = task.deleted_at.isoformat() if task.deleted_at else None
+            rows.append(row)
+        tmp = self.path.with_name(self.path.name + ".tmp")
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            tmp.write_text(json.dumps(rows, indent=2), encoding="utf-8")
+            os.replace(tmp, self.path)
+        except OSError as exc:
+            raise RuntimeError(f"Could not write task file {self.path}: {exc}") from exc
+
+    def add(self, task: Task) -> Task:
+        super().add(task)
+        self._write()
+        return task
+
+    def save(self, task: Task) -> Task:
+        super().save(task)
+        self._write()
+        return task
+
+
+def _parse_dt(value) -> Optional[datetime]:
+    return datetime.fromisoformat(value.replace("Z", "+00:00")) if value else None
 
 
 def seed_sample_data(store: TaskStore, now: datetime) -> None:

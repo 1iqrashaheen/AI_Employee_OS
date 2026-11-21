@@ -27,6 +27,12 @@ uvicorn app.main:app --reload --port 8001
 The app starts with ten sample tasks (overdue, due soon, in progress, done, cancelled).
 To start empty instead: `TASK_MANAGER_SEED=0 uvicorn app.main:app --port 8001`.
 
+To keep your tasks when the server restarts, save them to a file (samples are added only the first time):
+
+```bash
+TASK_MANAGER_FILE=tasks.json uvicorn app.main:app --port 8001
+```
+
 ## Run the tests
 
 ```bash
@@ -34,6 +40,9 @@ pytest -v
 ```
 
 Tests use a fixed clock and an empty store, so they give the same result at any time of day.
+Latest result (48 passed) and what each test file covers: [docs/test-results.md](docs/test-results.md).
+
+Other modules that want to create tasks (workflow, meeting assistant, executive assistant): [docs/integration.md](docs/integration.md).
 
 ## What you can do in the web page
 
@@ -82,11 +91,11 @@ task-manager/
 ├── app/
 │   ├── main.py        # FastAPI routes and error handling
 │   ├── service.py     # the rules: complete, filter, reminders, progress
-│   ├── store.py       # where tasks are kept (in memory) + sample data
+│   ├── store.py       # where tasks are kept (memory or JSON file) + sample data
 │   ├── schemas.py     # request/response shapes and validation
 │   └── static/index.html   # the web page
 ├── tests/             # pytest tests
-└── docs/research.md   # research, decisions, limitations
+└── docs/              # research.md, test-results.md, integration.md
 ```
 
 ## Connecting to the shared backend
@@ -100,6 +109,6 @@ Only `app/store.py` knows tasks are kept in memory. To connect to Hadeed's datab
 ## Limitations
 
 - Reminders show inside the app only; no email, WhatsApp or push message is sent.
-- Tasks are kept in memory, so they are lost when the server restarts, until the database is connected.
+- By default tasks are kept in memory and lost when the server restarts. `TASK_MANAGER_FILE` saves them to a JSON file instead (one server only; not a replacement for the shared database).
 - Assignees are four sample people and there is no login.
 - `customer_id` and `record_id` are accepted but not checked (those records belong to the shared backend).

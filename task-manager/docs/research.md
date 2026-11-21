@@ -46,6 +46,6 @@ Only open tasks (`todo`, `in_progress`) get reminders. A task shows once, under 
 ## Limitations and future work
 
 - Reminders appear in the app only. No email, WhatsApp or push notification is sent.
-- Tasks are lost when the server restarts (in memory) until the shared database is connected.
+- Tasks are in memory by default. `TASK_MANAGER_FILE` keeps them in a JSON file between restarts, but this is for demos only (one server, no sharing); the shared database replaces it.
 - Assignees are four sample people, and there is no login. After integration, the user and company come from the login token.
 - `customer_id` and `record_id` are accepted but not checked, because customers and records live in the shared backend.
