@@ -21,7 +21,11 @@ This document describes every endpoint that is currently available. New sections
    - [POST /auth/refresh](#post-authrefresh)
    - [GET /auth/me](#get-authme)
    - [POST /auth/change-password](#post-authchange-password)
-   - [GET /auth/admin-check](#get-authadmin-check)
+   - [POST /auth/logout](#post-authlogout)
+   - [POST /auth/forgot-password](#post-authforgot-password)
+   - [POST /auth/reset-password](#post-authreset-password)
+   - [GET /companies/me](#get-companiesme)
+   - [PATCH /companies/me](#patch-companiesme)
 6. [Validation rules](#6-validation-rules)
 7. [Error reference](#7-error-reference)
 8. [Frontend integration guide](#8-frontend-integration-guide)
@@ -120,7 +124,8 @@ Important behavior:
 - **Do not send the refresh token as a bearer token.** It will be rejected with `TOKEN_INVALID`. Likewise, the access token cannot be used on `/auth/refresh`.
 - **The role comes from the database on every request**, not from the token. If an admin changes someone's role or deactivates them, it takes effect immediately.
 - **Changing the password invalidates all tokens** issued before the change. The `change-password` response returns a fresh token pair so the current session can continue.
-- **There is no logout endpoint.** To log out, delete both tokens on the client.
+- **Logout revokes every token for the user.** `POST /auth/logout` increments the
+  server-side token version, invalidating existing access and refresh tokens.
 
 ---
 
@@ -129,8 +134,8 @@ Important behavior:
 | Role | Description | Created by |
 |---|---|---|
 | `admin` | Full control of the company. The first user created by `/auth/register` is always an `admin`. | Register |
-| `manager` | Can manage customers, tasks, and records, and see the user list | Admin (Users API, coming soon) |
-| `member` | Standard staff user | Admin (Users API, coming soon) |
+| `manager` | Can manage customers, tasks, records, and see the user list | Admin |
+| `member` | Standard staff user | Admin |
 
 Every protected endpoint is scoped to the company in the user's account. A user can never see another company's data, and the company is always taken from the token, never from the request body.
 
@@ -138,7 +143,6 @@ Every protected endpoint is scoped to the company in the user's account. A user 
 |---|---|---|---|
 | `GET /auth/me` | Yes | Yes | Yes |
 | `POST /auth/change-password` | Yes | Yes | Yes |
-| `GET /auth/admin-check` | Yes | 403 | 403 |
 
 ---
 
@@ -402,27 +406,6 @@ curl -X POST http://127.0.0.1:8000/api/v1/auth/change-password \
 
 ---
 
-### GET /auth/admin-check
-
-A small demo endpoint for testing role protection. Only users with the `admin` role get `200`. It will be removed once real admin-only endpoints exist in the Users API.
-
-**Response 200**
-```json
-{
-  "success": true,
-  "message": "You are an admin",
-  "data": { "user_id": "...", "role": "admin" }
-}
-```
-
-**Errors**
-
-| Status | `code` | When |
-|---|---|---|
-| 403 | `FORBIDDEN` | Logged in, but not an admin |
-| 401 | token codes | Token problems |
-
----
 
 ## 6. Validation rules
 
@@ -615,7 +598,8 @@ If you are running the backend locally, the response also contains a `debug` obj
 
 | Version | Date | Changes |
 |---|---|---|
-| 0.2.0 | 2026-11-19 | Authentication: register, login, refresh, me, change-password, admin-check. Standard error format with `request_id`. |
+| 0.3.0 | 2026-11-23 | Logout, password reset flow, company profile management, and expanded authentication tests. |
+| 0.2.0 | 2026-11-19 | Authentication: register, login, refresh, me, and change-password. Standard error format with `request_id`. |
 | 0.1.0 | 2026-11-18 | Project setup, database schema, `GET /health` |
 
-**Coming next:** Users, Customers, Tasks, and Records APIs. Endpoint paths and field names were shared earlier in the design document and will not change without notice.
+Direct Record CRUD endpoints remain intentionally unimplemented.

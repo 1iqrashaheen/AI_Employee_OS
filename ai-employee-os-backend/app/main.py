@@ -10,6 +10,8 @@ from app.dependencies.db import DbSession
 from app.routers import auth as auth_router
 from app.routers import debug as debug_router
 from app.routers import customers as customers_router
+from app.routers import companies as companies_router
+from app.routers import records as records_router
 from app.routers import users as users_router
 from app.routers import tasks as tasks_router
 
@@ -44,6 +46,8 @@ if settings.is_development:
 app.include_router(users_router.router, prefix=API_PREFIX)
 app.include_router(customers_router.router, prefix=API_PREFIX)
 app.include_router(tasks_router.router, prefix=API_PREFIX)
+app.include_router(companies_router.router, prefix=API_PREFIX)
+app.include_router(records_router.router, prefix=API_PREFIX)
 
 @app.get(f"{API_PREFIX}/health", tags=["Health"])
 def health(db: DbSession):

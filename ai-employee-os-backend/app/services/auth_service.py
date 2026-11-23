@@ -24,6 +24,7 @@ from app.core.security import (
     DUMMY_PASSWORD_HASH,
     create_access_token,
     create_refresh_token,
+    create_reset_token,
     decode_token,
     hash_password,
     verify_password,
@@ -177,3 +178,35 @@ def change_password(db: Session, user: User, current_password: str, new_password
     db.commit()
     db.refresh(user)
     logger.info("Password changed: user_id=%s (all older tokens revoked)", user.id)
+
+
+def logout(db: Session, user: User) -> None:
+    """Revoke every access and refresh token belonging to the current user."""
+    user.token_version += 1
+    db.commit()
+    db.refresh(user)
+    logger.info("User logged out: user_id=%s (all tokens revoked)", user.id)
+
+
+def create_password_reset(db: Session, email: str) -> str | None:
+    """
+    Create a reset token without disclosing whether the email exists.
+    The caller decides whether to expose or deliver the token.
+    """
+    user = get_user_by_email(db, email)
+    if user is None or not user.is_active:
+        return None
+    company = db.get(Company, user.company_id)
+    if company is None or not company.is_active:
+        return None
+    return create_reset_token(user_id=user.id, token_version=user.token_version)
+
+
+def reset_password(db: Session, reset_token: str, new_password: str) -> None:
+    payload = decode_token(reset_token, expected_type="reset")
+    user = load_user_from_payload(db, payload)
+    user.password_hash = hash_password(new_password)
+    user.token_version += 1
+    db.commit()
+    db.refresh(user)
+    logger.info("Password reset: user_id=%s (all older tokens revoked)", user.id)

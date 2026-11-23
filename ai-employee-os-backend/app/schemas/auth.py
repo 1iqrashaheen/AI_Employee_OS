@@ -75,6 +75,22 @@ class ChangePasswordRequest(BaseModel):
         return self
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+    _normalize_email = field_validator("email", mode="before")(_normalize_email)
+
+
+class ResetPasswordRequest(BaseModel):
+    reset_token: str = Field(min_length=10)
+    new_password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("new_password")
+    @classmethod
+    def password_is_strong(cls, value: str) -> str:
+        return _check_password_strength(value)
+
+
 # ------------------------------- responses --------------------------------- #
 class UserOut(BaseModel):
     """A user as the API shows it. password_hash and token_version are never included."""
@@ -110,6 +126,11 @@ class TokenPair(BaseModel):
     expires_in: int = Field(description="Access token lifetime in seconds")
 
 
+class PasswordResetData(BaseModel):
+    """Reset delivery is omitted; send reset links only through a verified provider."""
+    sent: bool = True
+
+
 class AuthData(TokenPair):
     """Register / login: the tokens plus who just logged in."""
 
@@ -121,7 +142,3 @@ class MeData(BaseModel):
     user: UserOut
     company: CompanyOut
 
-
-class RoleCheckData(BaseModel):
-    user_id: uuid.UUID
-    role: str

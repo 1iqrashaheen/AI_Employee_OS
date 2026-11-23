@@ -108,3 +108,86 @@ Expected: done tasks no longer appear in the `overdue=true` filter.
 
 In Postman or Thunder Client, save the `request_id` header/value for any `500`
 or `503` and include it in backend bug reports.
+
+## 7. Logout and password reset
+
+### Logout
+
+Send `POST /auth/logout` with the current access token.
+
+Expected: `200`. The old access and refresh tokens are revoked immediately.
+
+### Forgot password
+
+Send `POST /auth/forgot-password`:
+
+```json
+{
+  "email": "admin@example.com"
+}
+```
+
+The response is deliberately the same whether or not the account exists.
+In development, `data.reset_token` contains the reset token.
+Email delivery is not implemented yet.
+
+### Reset password
+
+Send `POST /auth/reset-password`:
+
+```json
+{
+  "reset_token": "<token>",
+  "new_password": "N3wStr0ngPass"
+}
+```
+
+Expected: `200`. Existing tokens are revoked and the user must log in again.
+
+## 8. Company management
+
+Send `GET /companies/me` with any authenticated role.
+
+Send `PATCH /companies/me` with an admin access token:
+
+```json
+{
+  "name": "Updated Company",
+  "phone": "+923001234567",
+  "plan": "pro"
+}
+```
+
+Expected: `200`. Members and managers receive `403`.
+
+## 9. Records
+
+Create a record after creating a customer:
+
+```json
+{
+  "type": "invoice",
+  "customer_id": "<customer_uuid>",
+  "task_id": "<optional_task_uuid>",
+  "title": "Invoice for consulting",
+  "reference_no": "INV-2026-001",
+  "status": "pending",
+  "amount": "1250.00",
+  "currency": "USD",
+  "data": {
+    "line_items": [
+      {"description": "Consulting", "amount": 1250}
+    ]
+  }
+}
+```
+
+Useful requests:
+
+- `GET /records?type=invoice`
+- `GET /records?customer_id=<customer_uuid>`
+- `GET /records?type=invoice&customer_id=<customer_uuid>`
+- `PATCH /records/<record_uuid>` with only the fields to change
+- `DELETE /records/<record_uuid>`
+
+The `task_id` must belong to the selected customer and the same company.
