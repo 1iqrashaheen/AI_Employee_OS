@@ -1,12 +1,16 @@
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.db.mixins import SoftDeleteMixin, TimestampMixin, UUIDPrimaryKeyMixin
 
+if TYPE_CHECKING:
+    from app.models.customer import Customer
+    from app.models.user import User
 
 class Task(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
     __tablename__ = "tasks"
@@ -38,7 +42,13 @@ class Task(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
         String(20), nullable=False, server_default="manual"
     )
     created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
-
+       # Read-only links used to show names in responses. We still WRITE through the *_id columns.
+    assignee: Mapped[Optional["User"]] = relationship(
+        "User", foreign_keys="Task.assignee_id", viewonly=True
+    )
+    customer: Mapped[Optional["Customer"]] = relationship(
+        "Customer", foreign_keys="Task.customer_id", viewonly=True
+    )
     __table_args__ = (
         CheckConstraint(
             "status IN ('todo','in_progress','done','cancelled')", name="status_valid"

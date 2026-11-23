@@ -93,3 +93,9 @@ class ConflictError(AppException):
     status_code = 409
     code = "CONFLICT"
     message = "The request conflicts with existing data"
+
+class UnprocessableError(AppException):
+    """422 for rules that need the database (e.g. 'Owner must be an active user of your company'). """
+    status_code = 422
+    code = 'VALIDATION_ERROR'
+    message = 'Validation Failed'

@@ -2,11 +2,13 @@ import uuid
 
 from sqlalchemy import CheckConstraint, ForeignKey, Index, String, Text, text
 from sqlalchemy.dialects.postgresql import ARRAY
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column,relationship
 
 from app.db.base import Base
 from app.db.mixins import SoftDeleteMixin, TimestampMixin, UUIDPrimaryKeyMixin
-
+from typing import TYPE_CHECKING, Optional
+if TYPE_CHECKING:
+    from app.models.user import User
 
 class Customer(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
     __tablename__ = "customers"
@@ -30,6 +32,12 @@ class Customer(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
     owner_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
 
+
+        # Read-only link used to show the owner's name. We still WRITE through owner_id.
+    owner: Mapped[Optional["User"]] = relationship(
+        "User", foreign_keys="Customer.owner_id", viewonly=True
+    )
+    
     __table_args__ = (
         CheckConstraint(
             "stage IN ('lead','qualified','proposal','negotiation','won','lost')",
