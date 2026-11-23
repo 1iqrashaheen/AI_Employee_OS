@@ -1,4 +1,5 @@
 """Customer (CRM) endpoints. All paths are under /api/v1/customers."""
+import math
 import uuid
 from typing import Annotated
 
@@ -8,7 +9,7 @@ from app.dependencies.auth import CurrentUser, ManagerOrAdmin
 from app.dependencies.db import DbSession
 from app.dependencies.pagination import Pager
 from app.routers.responses import error_responses
-from app.schemas.common import ApiResponse, PaginatedResponse
+from app.schemas.common import ApiResponse, PageMeta, PaginatedResponse
 from app.schemas.customer import CustomerCreate, CustomerOut, CustomerStage, CustomerUpdate, TimelineItem
 from app.services import customer_service
 

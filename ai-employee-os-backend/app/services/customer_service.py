@@ -3,7 +3,7 @@ import logging
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import or_, select,String, cast, func, literal_column, null, select, union_all
+from sqlalchemy import or_, select, String, cast, func, literal_column, null, union_all
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 from app.models import Customer, Record, Task, User
@@ -15,7 +15,6 @@ from app.core.exceptions import (
     UnprocessableError,
 )
 from app.db.query import Pagination, apply_sort, contains, paginate
-from app.models import Customer, User
 from app.schemas.customer import CustomerCreate, CustomerUpdate
 
 logger = logging.getLogger("app.customers")

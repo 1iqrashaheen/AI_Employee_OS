@@ -9,9 +9,7 @@ from app.core.middleware import register_request_middleware
 from app.dependencies.db import DbSession
 from app.routers import auth as auth_router
 from app.routers import debug as debug_router
-from app.routers import auth as auth_router
 from app.routers import customers as customers_router
-from app.routers import debug as debug_router
 from app.routers import users as users_router
 from app.routers import tasks as tasks_router
 
@@ -43,7 +41,6 @@ API_PREFIX = "/api/v1"
 app.include_router(auth_router.router, prefix=API_PREFIX)
 if settings.is_development:
     app.include_router(debug_router.router, prefix=API_PREFIX)
-    app.include_router(auth_router.router, prefix=API_PREFIX)
 app.include_router(users_router.router, prefix=API_PREFIX)
 app.include_router(customers_router.router, prefix=API_PREFIX)
 app.include_router(tasks_router.router, prefix=API_PREFIX)

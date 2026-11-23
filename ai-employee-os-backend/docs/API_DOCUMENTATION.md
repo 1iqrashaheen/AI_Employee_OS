@@ -54,7 +54,7 @@ This document describes every endpoint that is currently available. New sections
 | IDs | UUID strings, for example `3f2b6c1e-9a4d-4b7e-8c21-0d5f6a7b8c9d` |
 | Dates and times | ISO 8601 in UTC, for example `2026-11-19T10:00:00Z` |
 | Emails | Trimmed and lowercased by the backend |
-| Unknown JSON fields in a request | Ignored |
+| Unknown JSON fields in a request | Rejected with `422 VALIDATION_ERROR` |
 
 ### Success response
 
