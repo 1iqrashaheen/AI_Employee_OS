@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 
 from .schemas import (
     OPEN_STATUSES,
+    AssigneeSummary,
     PRIORITY_RANK,
     ListFilters,
     ProgressSummary,
@@ -47,6 +48,7 @@ def to_view(task: Task, store: TaskStore, now: datetime) -> TaskView:
     return TaskView(
         **task.model_dump(),
         is_overdue=is_overdue(task, now),
+        assignee=AssigneeSummary(id=assignee.id, full_name=assignee.full_name) if assignee else None,
         assignee_name=assignee.full_name if assignee else None,
     )
 
@@ -68,7 +70,7 @@ def _check_dates(due_date: Optional[datetime], remind_at: Optional[datetime]) ->
 def _get_or_404(store: TaskStore, task_id: UUID) -> Task:
     task = store.get(task_id)
     if task is None:
-        raise AppError(404, "NOT_FOUND", "Task not found")
+        raise AppError(404, "TASK_NOT_FOUND", "Task not found")
     return task
 
 
@@ -94,6 +96,8 @@ def get_task(store: TaskStore, task_id: UUID) -> Task:
 def update_task(store: TaskStore, task_id: UUID, data: TaskUpdate, now: datetime) -> Task:
     task = _get_or_404(store, task_id)
     changes = data.model_dump(exclude_unset=True)
+    if not changes:
+        raise AppError(400, "NO_FIELDS_TO_UPDATE", "Provide at least one field to update")
 
     # title and status can be left out, but not set to "nothing"
     for required in ("title", "status", "priority"):
@@ -130,9 +134,9 @@ def list_tasks(store: TaskStore, filters: ListFilters, now: datetime) -> Tuple[L
     tasks = store.all()
 
     if filters.status:
-        tasks = [t for t in tasks if t.status == filters.status]
+        tasks = [t for t in tasks if t.status in filters.status]
     if filters.priority:
-        tasks = [t for t in tasks if t.priority == filters.priority]
+        tasks = [t for t in tasks if t.priority in filters.priority]
     if filters.assignee_id:
         tasks = [t for t in tasks if t.assignee_id == filters.assignee_id]
     if filters.customer_id:

@@ -5,11 +5,15 @@ Docs:  http://localhost:8001/docs     UI: http://localhost:8001/
 
 Responses use the team's standard shape (success / message / data / meta) and
 errors use (success / message / code / errors), as in the backend design doc.
+
+Two modes:
+* standalone (default): tasks are kept here (memory, or a JSON file), with sample data.
+* backend mode (``TASK_BACKEND_URL`` set): the shared backend holds the data; see backend.py.
 """
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, List, Optional
 from uuid import UUID
 
 from fastapi import Depends, FastAPI, Query, Request
@@ -18,8 +22,9 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import service
+from . import backend, service
 from .schemas import ListFilters, TaskCreate, TaskUpdate, TaskPriority, TaskStatus
+from .backend import BackendClient
 from .store import AppError, JsonFileTaskStore, TaskStore, seed_sample_data
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -47,12 +52,15 @@ def create_app(
     store: Optional[TaskStore] = None,
     now_fn: Callable[[], datetime] = _utcnow,
     seed: bool = False,
+    backend_client: Optional[BackendClient] = None,
 ) -> FastAPI:
-    """Build the app. Tests pass their own store and clock; seed=True adds sample tasks."""
+    """Build the app. Tests pass their own store and clock; seed=True adds sample tasks.
+
+    Pass ``backend_client`` to use the shared backend instead of local storage."""
     app = FastAPI(title="AI Employee OS - Task Manager", version="0.1.0")
     app.state.store = store or TaskStore()
     app.state.now_fn = now_fn
-    if seed and not app.state.store.all():  # never add samples on top of saved tasks
+    if seed and backend_client is None and not app.state.store.all():  # never add samples on top of saved tasks
         seed_sample_data(app.state.store, now_fn())
 
     def get_store(request: Request) -> TaskStore:
@@ -94,7 +102,13 @@ def create_app(
 
     @app.get(f"{api}/health", tags=["Health"])
     def health():
-        return _ok("OK", {"status": "healthy"})
+        """`mode` tells the web page whether it must show the sign-in form."""
+        return _ok("OK", {"status": "healthy", "mode": "standalone" if backend_client is None else "backend"})
+
+    if backend_client is not None:
+        _add_backend_routes(app, api, backend_client, get_now)
+        _add_web_page(app)
+        return app
 
     @app.get(f"{api}/assignees", tags=["Tasks"])
     def assignees(store: TaskStore = Depends(get_store)):
@@ -103,8 +117,8 @@ def create_app(
 
     @app.get(f"{api}/tasks", tags=["Tasks"])
     def list_tasks(
-        status: Optional[TaskStatus] = None,
-        priority: Optional[TaskPriority] = None,
+        status: Optional[List[TaskStatus]] = Query(None, description="Repeat for several: ?status=todo&status=in_progress"),
+        priority: Optional[List[TaskPriority]] = Query(None, description="Repeat for several"),
         assignee_id: Optional[UUID] = None,
         customer_id: Optional[UUID] = None,
         due_before: Optional[datetime] = None,
@@ -178,20 +192,83 @@ def create_app(
         service.delete_task(store, task_id, now)
         return _ok("Task deleted successfully", None)
 
-    # --- the simple web page --------------------------------------------------
+    _add_web_page(app)
+    return app
+
+
+def _add_web_page(app: FastAPI) -> None:
+    """The simple web page (the same page in both modes)."""
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
     @app.get("/", include_in_schema=False)
     def index():
         return FileResponse(STATIC_DIR / "index.html")
 
-    return app
+
+def _add_backend_routes(app: FastAPI, api: str, client: BackendClient, get_now) -> None:
+    """Routes for backend mode. The caller's own token is passed on; nothing is stored here."""
+
+    def auth_of(request: Request) -> Optional[str]:
+        return request.headers.get("authorization")
+
+    # sign in: passed on unchanged, so the web page can use the shared login
+    @app.post(f"{api}/auth/login", tags=["Backend login"])
+    async def login(request: Request):
+        return await client.forward(request, "/auth/login")
+
+    @app.get(f"{api}/auth/me", tags=["Backend login"])
+    async def me(request: Request):
+        return await client.forward(request, "/auth/me")
+
+    # this module's own features, worked out from the backend's tasks
+    @app.get(f"{api}/assignees", tags=["Tasks"])
+    async def assignees(request: Request):
+        """People a task can be assigned to: the shared backend's active users."""
+        store = await backend.load_store(client, auth_of(request))
+        return _ok("OK", [a.model_dump(mode="json") for a in store.assignees])
+
+    @app.get(f"{api}/tasks/reminders", tags=["Reminders"])
+    async def reminders(request: Request, within_hours: int = Query(service.DUE_SOON_HOURS, ge=1, le=24 * 30),
+                        now: datetime = Depends(get_now)):
+        store = await backend.load_store(client, auth_of(request))
+        items = service.get_reminders(store, now, within_hours)
+        return _ok("OK", [r.model_dump(mode="json") for r in items], {"total": len(items)})
+
+    @app.get(f"{api}/tasks/progress", tags=["Reminders"])
+    async def progress(request: Request, assignee_id: Optional[UUID] = None,
+                       now: datetime = Depends(get_now)):
+        store = await backend.load_store(client, auth_of(request))
+        return _ok("OK", service.progress_summary(store, now, assignee_id).model_dump(mode="json"))
+
+    # create, read, edit, delete: the shared backend does the work and the checking
+    @app.get(f"{api}/tasks", tags=["Tasks"])
+    async def list_tasks(request: Request):
+        return await client.forward(request, "/tasks")
+
+    @app.post(f"{api}/tasks", status_code=201, tags=["Tasks"])
+    async def create_task(request: Request):
+        return await client.forward(request, "/tasks")
+
+    @app.get(api + "/tasks/{task_id}", tags=["Tasks"])
+    async def get_task(request: Request, task_id: UUID):
+        return await client.forward(request, f"/tasks/{task_id}")
+
+    @app.patch(api + "/tasks/{task_id}", tags=["Tasks"])
+    async def update_task(request: Request, task_id: UUID):
+        return await client.forward(request, f"/tasks/{task_id}")
+
+    @app.delete(api + "/tasks/{task_id}", tags=["Tasks"])
+    async def delete_task(request: Request, task_id: UUID):
+        return await client.forward(request, f"/tasks/{task_id}")
 
 
 # `uvicorn app.main:app` starts with sample tasks unless TASK_MANAGER_SEED=0.
 # Set TASK_MANAGER_FILE=tasks.json to keep tasks between restarts.
+# Set TASK_BACKEND_URL=http://127.0.0.1:8000/api/v1 to use the shared backend instead.
 _data_file = os.getenv("TASK_MANAGER_FILE")
+_backend_url = os.getenv("TASK_BACKEND_URL")
 app = create_app(
     store=JsonFileTaskStore(_data_file) if _data_file else None,
     seed=os.getenv("TASK_MANAGER_SEED", "1") == "1",
+    backend_client=BackendClient(_backend_url) if _backend_url else None,
 )

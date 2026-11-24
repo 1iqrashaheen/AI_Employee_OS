@@ -70,14 +70,36 @@
            color: var(--bg); padding: 8px 14px; border-radius: 8px; opacity: 0; transition: opacity .2s;
            pointer-events: none; }
   .toast.show { opacity: 1; }
+  #login-card { max-width: 380px; margin: 40px auto; }
+  #login-card[hidden], #app[hidden], #who[hidden] { display: none; }
+  #who { color: var(--muted); font-size: 13px; }
   @media (max-width: 600px) { .task { grid-template-columns: auto 1fr; } .actions { grid-column: 2; } }
 </style>
 </head>
 <body>
 <main>
-  <h1>Task Manager</h1>
-  <p class="sub">Create, assign and complete tasks. Reminders show what is overdue or due soon.</p>
+  <div class="row" style="justify-content: space-between; align-items: flex-start">
+    <div>
+      <h1>Task Manager</h1>
+      <p class="sub">Create, assign and complete tasks. Reminders show what is overdue or due soon.</p>
+    </div>
+    <div id="who" hidden><span id="who-name"></span> · <a href="#" id="signout">Sign out</a></div>
+  </div>
 
+  <section class="card" id="login-card" aria-label="Sign in" hidden>
+    <h2>Sign in</h2>
+    <p class="sub" style="margin-bottom:12px">Use your AI Employee OS account.</p>
+    <form id="login-form" novalidate>
+      <div style="margin-bottom:10px"><label for="l-email">Email</label>
+        <input id="l-email" type="email" autocomplete="username" required></div>
+      <div style="margin-bottom:10px"><label for="l-password">Password</label>
+        <input id="l-password" type="password" autocomplete="current-password" required></div>
+      <div class="err" id="login-error" role="alert"></div>
+      <button class="primary" type="submit" id="l-submit">Sign in</button>
+    </form>
+  </section>
+
+  <div id="app">
   <section class="card" aria-label="Progress">
     <div class="row" style="justify-content: space-between">
       <h2 style="margin:0">Progress</h2>
@@ -131,12 +153,13 @@
       <div><label for="s-assignee">Assignee</label>
         <select id="s-assignee"><option value="">Everyone</option></select></div>
       <div><label for="s-sort">Sort</label>
-        <select id="s-sort"><option value="due_date">Due date</option><option value="priority">Priority</option><option value="-created_at">Newest</option></select></div>
+        <select id="s-sort"><option value="due_date">Due date</option><option value="-priority">Priority</option><option value="-created_at">Newest</option></select></div>
       <div style="padding-top:18px"><label style="display:flex;gap:6px;align-items:center;margin:0">
         <input type="checkbox" id="s-overdue" style="width:auto"> Overdue only</label></div>
     </div>
     <div id="list"></div>
   </section>
+  </div>
 </main>
 <div class="toast" id="toast" role="status"></div>
 
@@ -157,17 +180,37 @@ function el(tag, props = {}, ...children) {
   return node;
 }
 
+// The sign-in token (backend mode only) is kept for this browser tab only.
+const store = {
+  get(k) { try { return sessionStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { sessionStorage.setItem(k, v); } catch { /* private window: sign in again next time */ } },
+  del(k) { try { sessionStorage.removeItem(k); } catch { /* nothing to remove */ } },
+};
+let mode = "standalone";
+
 async function api(path, options = {}) {
-  const res = await fetch(API + path, {
-    headers: { "Content-Type": "application/json" }, ...options,
-  });
-  const body = await res.json();
+  const headers = { "Content-Type": "application/json" };
+  const token = store.get("token");
+  if (token) headers.Authorization = "Bearer " + token;
+  let res, body;
+  try {
+    res = await fetch(API + path, { ...options, headers });
+    body = await res.json();
+  } catch (e) { throw new Error("Could not reach the server"); }
   if (!res.ok || body.success === false) {
+    if (res.status === 401 && mode === "backend" && path !== "/auth/login") {
+      store.del("token"); showLogin("Your session ended. Please sign in again.");
+    }
     const detail = (body.errors || []).map((e) => `${e.field}: ${e.message}`).join("; ");
-    throw new Error(detail || body.message || "Request failed");
+    const err = new Error(detail || body.message || "Request failed");
+    err.status = res.status;
+    throw err;
   }
   return body;
 }
+
+// A task from the shared backend names its assignee inside `assignee`; the standalone one has `assignee_name`.
+const who = (t) => t.assignee_name || (t.assignee ? t.assignee.full_name : "");
 
 function toast(msg) {
   const t = $("toast"); t.textContent = msg; t.classList.add("show");
@@ -209,7 +252,7 @@ async function loadReminders() {
   box.replaceChildren(...data.map((r) => el("div", { class: "reminder" },
     el("span", { class: "chip " + kind[r.reminder_type][0] }, kind[r.reminder_type][1]),
     el("span", { class: "grow" }, el("strong", {}, r.task.title), ` — ${r.message}`),
-    el("span", { class: "meta", style: "margin:0" }, r.task.assignee_name || "Unassigned"),
+    el("span", { class: "meta", style: "margin:0" }, who(r.task) || "Unassigned"),
   )));
 }
 
@@ -241,7 +284,7 @@ function renderTask(t) {
 
   const meta = el("div", { class: "meta" },
     el("span", { class: "chip " + priorityClass[t.priority] }, t.priority),
-    el("span", {}, t.assignee_name ? "Assigned to " + t.assignee_name : "Unassigned"),
+    el("span", {}, who(t) ? "Assigned to " + who(t) : "Unassigned"),
   );
   if (t.due_date) meta.append(el("span", { class: t.is_overdue ? "chip red" : "" }, (t.is_overdue ? "Overdue · " : "Due ") + fmt(t.due_date)));
   if (t.completed_at) meta.append(el("span", {}, "Completed " + fmt(t.completed_at)));
@@ -306,19 +349,57 @@ $("form").addEventListener("submit", async (ev) => {
 
 $("new").addEventListener("click", () => openForm(null));
 $("cancel").addEventListener("click", closeForm);
-for (const id of ["s-status", "s-priority", "s-assignee", "s-sort", "s-overdue"]) $(id).addEventListener("change", loadList);
-let timer; $("q").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(loadList, 250); });
+// A failed reload is reported, never left as an unhandled error. A 401 already sent the user to the sign-in form.
+const reloadList = () => loadList().catch((e) => { if (e.status !== 401) toast(e.message); });
+for (const id of ["s-status", "s-priority", "s-assignee", "s-sort", "s-overdue"]) $(id).addEventListener("change", reloadList);
+let timer; $("q").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(reloadList, 250); });
 
-(async function init() {
+// ---- sign in (backend mode) ------------------------------------------------------
+function showLogin(message) {
+  $("app").hidden = true; $("who").hidden = true; $("login-card").hidden = false;
+  $("login-error").textContent = message || "";
+  $("l-password").value = "";
+  $("l-email").focus();
+}
+
+$("login-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  $("login-error").textContent = ""; $("l-submit").disabled = true;
+  try {
+    const { data } = await api("/auth/login", { method: "POST",
+      body: JSON.stringify({ email: $("l-email").value.trim(), password: $("l-password").value }) });
+    store.set("token", data.access_token);
+    store.set("name", data.user.full_name);
+    $("l-password").value = "";
+    await start();
+  } catch (e) { $("login-error").textContent = e.message; }
+  finally { $("l-submit").disabled = false; }
+});
+
+$("signout").addEventListener("click", (ev) => {
+  ev.preventDefault(); store.del("token"); store.del("name"); showLogin("");
+});
+
+let intervalId;
+async function start() {
+  $("login-card").hidden = true; $("app").hidden = false;
+  if (mode === "backend") { $("who-name").textContent = store.get("name") || "Signed in"; $("who").hidden = false; }
   try {
     ({ data: assignees } = await api("/assignees"));
-    for (const a of assignees) {
-      $("f-assignee").append(el("option", { value: a.id }, a.full_name));
-      $("s-assignee").append(el("option", { value: a.id }, a.full_name));
+    for (const id of ["f-assignee", "s-assignee"]) {          // rebuild, so signing in twice never doubles the list
+      const sel = $(id); while (sel.options.length > 1) sel.remove(1);
+      for (const a of assignees) sel.append(el("option", { value: a.id }, a.full_name));
     }
     await refresh();
-  } catch (e) { toast(e.message); }
-  setInterval(() => { loadReminders().catch(() => {}); loadProgress().catch(() => {}); }, 60000);
+  } catch (e) { if (e.status !== 401) toast(e.message); return; }
+  clearInterval(intervalId);
+  intervalId = setInterval(() => { loadReminders().catch(() => {}); loadProgress().catch(() => {}); }, 60000);
+}
+
+(async function init() {
+  try { mode = (await api("/health")).data.mode; } catch (e) { toast(e.message); return; }
+  if (mode === "backend" && !store.get("token")) { showLogin(""); return; }
+  await start();
 })();
 </script>
 </body>

@@ -47,6 +47,7 @@ def test_create_with_all_fields_and_assignee_name(client):
     task = make(client, description="d", priority="urgent", assignee_id=str(SARA),
                 due_date=iso(48), remind_at=iso(24))
     assert task["assignee_name"] == "Sara Ahmed"
+    assert task["assignee"] == {"id": str(SARA), "full_name": "Sara Ahmed"}  # same shape as the shared backend
     assert task["priority"] == "urgent"
 
 
@@ -78,9 +79,34 @@ def test_unknown_assignee_is_rejected(client):
     assert res.json()["errors"][0] == {"field": "assignee_id", "message": "Assignee not found"}
 
 
-def test_naive_dates_are_treated_as_utc(client):
-    task = make(client, due_date="2026-11-20T09:00:00")
-    assert task["due_date"].startswith("2026-11-20T09:00:00")
+def test_date_without_time_zone_is_rejected(client):
+    """Same rule as the shared backend: send 'Z' or an offset, never a bare local time."""
+    res = client.post("/api/v1/tasks", json={"title": "a", "due_date": "2026-11-20T09:00:00"})
+    assert res.status_code == 422
+    assert res.json()["errors"][0]["field"] == "due_date"
+    assert "time zone" in res.json()["errors"][0]["message"]
+
+
+def test_dates_with_an_offset_are_stored_as_utc(client):
+    task = make(client, due_date="2026-11-20T09:00:00+05:00")
+    assert task["due_date"].startswith("2026-11-20T04:00:00")  # Pakistan time -> UTC
+
+
+def test_unknown_fields_are_rejected(client):
+    res = client.post("/api/v1/tasks", json={"title": "a", "colour": "red"})
+    assert res.status_code == 422 and res.json()["errors"][0]["field"] == "colour"
+    task = make(client)
+    assert client.patch(f"/api/v1/tasks/{task['id']}", json={"completed_at": "2026-11-20T09:00:00Z"}).status_code == 422
+
+
+def test_blank_description_is_stored_as_none(client):
+    assert make(client, description="   ")["description"] is None
+
+
+def test_patch_with_no_fields_is_a_bad_request(client):
+    task = make(client)
+    res = client.patch(f"/api/v1/tasks/{task['id']}", json={})
+    assert res.status_code == 400 and res.json()["code"] == "NO_FIELDS_TO_UPDATE"
 
 
 # --- read ----------------------------------------------------------------------
@@ -88,7 +114,7 @@ def test_get_task_and_404s(client):
     task = make(client)
     assert client.get(f"/api/v1/tasks/{task['id']}").json()["data"]["id"] == task["id"]
     missing = client.get("/api/v1/tasks/22222222-2222-4222-8222-222222222222")
-    assert missing.status_code == 404 and missing.json()["code"] == "NOT_FOUND"
+    assert missing.status_code == 404 and missing.json()["code"] == "TASK_NOT_FOUND"
     assert client.get("/api/v1/tasks/not-a-uuid").status_code == 422
 
 
@@ -166,6 +192,9 @@ def test_filters(filled):
     c = filled
     assert titles(c.get("/api/v1/tasks?status=in_progress")) == ["Team lunch"]
     assert titles(c.get("/api/v1/tasks?priority=low")) == ["Invoice review"]
+    # repeat the parameter for several values, as in the shared backend
+    assert sorted(titles(c.get("/api/v1/tasks?status=todo&status=in_progress"))) == [
+        "Invoice review", "Quotation for John", "Team lunch"]
     assert titles(c.get(f"/api/v1/tasks?assignee_id={SARA}")) == ["Quotation for John"]
     assert sorted(titles(c.get("/api/v1/tasks?search=TAX"))) == ["Invoice review"]  # searches description, any case
     assert titles(c.get("/api/v1/tasks?overdue=true")) == ["Quotation for John"]  # the done task is not "overdue"
@@ -180,7 +209,9 @@ def test_due_before_and_after(filled):
 
 def test_sort_by_priority_and_due_date_puts_missing_dates_last(filled):
     c = filled
-    assert titles(c.get("/api/v1/tasks?sort=priority")) == ["Quotation for John", "Team lunch", "Old task", "Invoice review"]
+    # same as the shared backend: priority ascending is low -> urgent, and -priority puts urgent first
+    assert titles(c.get("/api/v1/tasks?sort=priority")) == ["Invoice review", "Old task", "Team lunch", "Quotation for John"]
+    assert titles(c.get("/api/v1/tasks?sort=-priority")) == ["Quotation for John", "Team lunch", "Old task", "Invoice review"]
     assert titles(c.get("/api/v1/tasks?sort=due_date")) == ["Old task", "Quotation for John", "Invoice review", "Team lunch"]
     assert titles(c.get("/api/v1/tasks?sort=-due_date")) == ["Invoice review", "Quotation for John", "Old task", "Team lunch"]
 
