@@ -1,4 +1,4 @@
-"""Checked calculations: chhota data jis ka jawab haath se pata hai."""
+"""Checked calculations: small data set whose answers are known by hand."""
 import pandas as pd
 import reports as R
 
@@ -29,7 +29,7 @@ def test_top_customer():
 
 
 def test_forecast_needs_enough_data():
-    assert R.forecast(R.monthly(sales, expenses))["ok"] is False  # sirf 2 mahine
+    assert R.forecast(R.monthly(sales, expenses))["ok"] is False  # only 2 months of data
 
 
 def test_forecast_linear():

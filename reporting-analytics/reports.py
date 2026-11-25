@@ -1,4 +1,4 @@
-"""Saari calculations yahan hain (Flask se alag, taake test ho sakein)."""
+"""All calculations live here (separate from Flask so they can be tested)."""
 import numpy as np
 import pandas as pd
 
@@ -47,11 +47,11 @@ def new_customers_per_month(customers):
 
 
 def forecast(monthly_df, steps=3):
-    """Simple linear trend. Sirf tab jab 6+ mahine ka data ho."""
+    """Simple linear trend. Only runs when there are 6+ months of data."""
     n = len(monthly_df)
     if n < MIN_MONTHS_FOR_FORECAST:
         return {"ok": False,
-                "message": f"Forecast ke liye kam az kam {MIN_MONTHS_FOR_FORECAST} mahine chahiye, abhi {n} hain."}
+                "message": f"A forecast needs at least {MIN_MONTHS_FOR_FORECAST} months of data, but only {n} are available."}
     y = monthly_df["revenue"].values
     x = np.arange(n)
     slope, intercept = np.polyfit(x, y, 1)

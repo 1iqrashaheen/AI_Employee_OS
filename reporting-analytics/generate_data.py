@@ -1,4 +1,4 @@
-"""Sample data banata hai: 12 mahine, 8 customers. Ek baar chalao."""
+"""Creates sample data: 12 months, 8 customers. Run once."""
 import random
 import pandas as pd
 
@@ -20,7 +20,7 @@ for idx, m in enumerate(months):
         cid = random.randint(1, len(customers))
         if cust_rows[cid - 1]["created_at"] > str(m.end_time.date()):
             continue
-        amount = random.randint(15, 60) * 1000 + idx * 800  # halka sa growth
+        amount = random.randint(15, 60) * 1000 + idx * 800  # slight growth over time
         day = random.randint(1, 28)
         status = "paid" if random.random() > 0.2 else "unpaid"
         sales.append({"date": f"{m}-{day:02d}", "customer": customers[cid - 1],
