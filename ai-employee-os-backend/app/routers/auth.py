@@ -1,7 +1,7 @@
 """Authentication endpoints. All paths are under /api/v1/auth."""
 from fastapi import APIRouter
 
-from app.dependencies.auth import AdminUser, CurrentUser
+from app.dependencies.auth import CurrentUser
 from app.dependencies.db import DbSession
 from app.schemas.auth import (
     AuthData,
@@ -9,9 +9,11 @@ from app.schemas.auth import (
     CompanyOut,
     LoginRequest,
     MeData,
+    PasswordResetData,
+    ForgotPasswordRequest,
     RefreshRequest,
     RegisterRequest,
-    RoleCheckData,
+    ResetPasswordRequest,
     TokenPair,
     UserOut,
 )
@@ -123,15 +125,37 @@ def change_password(payload: ChangePasswordRequest, current_user: CurrentUser, d
     )
 
 
-@router.get(
-    "/admin-check",
-    response_model=ApiResponse[RoleCheckData],
-    summary="Demo: admins only (used to test role protection)",
+@router.post(
+    "/logout",
+    response_model=ApiResponse[None],
+    summary="Log out by revoking every token for the current user",
     responses={401: _E401, 403: _E403},
 )
-def admin_check(admin: AdminUser):
-    # Temporary: remove once real admin-only endpoints exist (Day 5, Users API).
-    return ApiResponse[RoleCheckData](
-        message="You are an admin",
-        data=RoleCheckData(user_id=admin.id, role=admin.role),
+def logout(current_user: CurrentUser, db: DbSession):
+    auth_service.logout(db, current_user)
+    return ApiResponse[None](message="Logout successful")
+
+
+@router.post(
+    "/forgot-password",
+    response_model=ApiResponse[PasswordResetData],
+    summary="Request a password reset",
+    responses={422: _E422},
+)
+def forgot_password(payload: ForgotPasswordRequest, db: DbSession):
+    auth_service.create_password_reset(db, payload.email)
+    return ApiResponse[PasswordResetData](
+        message="If the account exists, password reset instructions will be sent",
+        data=PasswordResetData(sent=True),
     )
+
+
+@router.post(
+    "/reset-password",
+    response_model=ApiResponse[None],
+    summary="Reset a password using a reset token",
+    responses={400: _E422, 401: _E401, 403: _E403, 422: _E422},
+)
+def reset_password(payload: ResetPasswordRequest, db: DbSession):
+    auth_service.reset_password(db, payload.reset_token, payload.new_password)
+    return ApiResponse[None](message="Password reset successful")

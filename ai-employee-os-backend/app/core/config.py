@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     algorithm: Literal["HS256", "HS384", "HS512"] = "HS256"
     access_token_expire_minutes: int = Field(default=60, gt=0)
     refresh_token_expire_days: int = Field(default=7, gt=0)
+    reset_token_expire_minutes: int = Field(default=15, gt=0)
+    login_rate_limit: int = Field(default=5, ge=1)
+    login_rate_window_seconds: int = Field(default=60, ge=1)
     # Bcrypt cost factor. 12 is a good default (about 250 ms per hash).
     bcrypt_rounds: int = Field(default=12, ge=4, le=16)
 

@@ -21,7 +21,7 @@ import jwt
 from app.core.config import settings
 from app.core.exceptions import TokenExpiredError, TokenInvalidError
 
-TokenType = Literal["access", "refresh"]
+TokenType = Literal["access", "refresh", "reset"]
 
 
 # --------------------------------------------------------------------------- #
@@ -95,6 +95,14 @@ def create_refresh_token(
         days=settings.refresh_token_expire_days
     )
     return _encode({"sub": str(user_id), "ver": token_version, "type": "refresh"}, lifetime)
+
+
+def create_reset_token(*, user_id: uuid.UUID, token_version: int) -> str:
+    """Create a short-lived, single-purpose password reset token."""
+    return _encode(
+        {"sub": str(user_id), "ver": token_version, "type": "reset"},
+        timedelta(minutes=settings.reset_token_expire_minutes),
+    )
 
 
 def decode_token(token: str, expected_type: TokenType) -> dict[str, Any]:

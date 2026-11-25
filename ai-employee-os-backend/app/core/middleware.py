@@ -11,13 +11,17 @@ import logging
 import re
 import time
 import uuid
+from collections import deque
+from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 logger = logging.getLogger("app.request")
 
 # Accept a client-supplied ID only if it is short and boring (prevents log injection).
 _REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9_\-]{8,64}$")
+_LOGIN_ATTEMPTS: dict[str, deque[datetime]] = {}
 
 
 def get_request_id(request: Request) -> str:
@@ -33,6 +37,27 @@ def register_request_middleware(app: FastAPI) -> None:
         request.state.request_id = request_id
 
         start = time.perf_counter()
+        if request.method == "POST" and request.url.path == "/api/v1/auth/login":
+            from app.core.config import settings
+
+            client_ip = request.client.host if request.client else "unknown"
+            now = datetime.now(timezone.utc)
+            cutoff = now - timedelta(seconds=settings.login_rate_window_seconds)
+            attempts = _LOGIN_ATTEMPTS.setdefault(client_ip, deque())
+            while attempts and attempts[0] <= cutoff:
+                attempts.popleft()
+            if len(attempts) >= settings.login_rate_limit:
+                return JSONResponse(
+                    status_code=429,
+                    content={
+                        "success": False,
+                        "message": "Too many login attempts. Please wait before trying again.",
+                        "code": "RATE_LIMITED",
+                        "request_id": request_id,
+                    },
+                    headers={"X-Request-ID": request_id, "Retry-After": str(settings.login_rate_window_seconds)},
+                )
+            attempts.append(now)
         response = await call_next(request)  # an unhandled crash skips the lines below;
         duration_ms = (time.perf_counter() - start) * 1000  # the 500 handler logs it instead
 
