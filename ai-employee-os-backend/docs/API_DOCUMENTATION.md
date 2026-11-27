@@ -44,7 +44,7 @@ This document describes every endpoint that is currently available. New sections
 | Content type | `application/json` for every request with a body |
 | Auth header | `Authorization: Bearer <access_token>` |
 
-**CORS:** the backend currently allows the origins `http://localhost:3000` and `http://localhost:5173`. If your frontend runs on another origin, tell the backend owner so it can be added.
+**CORS:** the local defaults allow `http://localhost:3000` and `http://localhost:5173`. Set `CORS_ORIGINS` to the exact frontend origin(s) for other environments; production frontend origins should be configured in the hosting platform's environment variables.
 
 **Try it in Swagger:** open `/docs`, call `POST /auth/login`, copy the `access_token`, click **Authorize**, and paste the token **without** the word `Bearer`.
 
