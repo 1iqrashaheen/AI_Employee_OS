@@ -34,6 +34,15 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def reject_foreign_origins(request: Request, call_next):
+    """Another website must not be able to trigger approve/send/disconnect through the user's browser."""
+    origin = request.headers.get("origin")
+    if request.method not in ("GET", "HEAD", "OPTIONS") and origin and origin != config.FRONTEND_ORIGIN.rstrip("/"):
+        return JSONResponse(status_code=403, content={"detail": "Requests from this origin are not allowed."})
+    return await call_next(request)
+
+
 @app.exception_handler(GoogleError)
 async def google_error_handler(_: Request, exc: GoogleError):
     """Gmail and Google sign-in problems become a clear message the screen can show."""
@@ -199,7 +208,7 @@ def google_disconnect():
     return {"disconnected": True, "revoked_at_google": revoked}
 
 
-@app.get("/emails", response_model=list[Email], response_model_by_alias=True)
+@app.get("/emails", response_model=list[Email], response_model_by_alias=True, response_model_exclude={"__all__": {"expected"}})
 def list_emails(source: Literal["sample", "gmail"] = "sample", limit: int = Query(20, ge=1, le=gmail.MAX_LIMIT)):
     """Sample emails by default. source=gmail returns the newest real inbox emails (needs a connection)."""
     if source == "gmail":
@@ -207,7 +216,7 @@ def list_emails(source: Literal["sample", "gmail"] = "sample", limit: int = Quer
     return load_emails()
 
 
-@app.get("/emails/{email_id}", response_model=Email, response_model_by_alias=True)
+@app.get("/emails/{email_id}", response_model=Email, response_model_by_alias=True, response_model_exclude={"expected"})
 def read_email(email_id: str):
     email = get_email(email_id)
     if email is None:

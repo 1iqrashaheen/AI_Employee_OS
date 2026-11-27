@@ -15,7 +15,7 @@
 | Summarize and mark important emails | Inbox tab, `POST /summarize`, `POST /classify`, `backend/app/analysis.py` | Done. 35 labelled sample emails, 7 in the evaluation |
 | Approved send option | Approve, then Send with a confirmation window, `backend/app/drafts.py`, `sender.py`, `gmail.py` | Done. Real sending only with an authorized Gmail connection and the separate send permission; otherwise a labelled demo |
 | Research: permissions and AI drafting | Day 1 research doc (https://claude.ai/artifact/C6Yp4iTXxZMLCpieMGe3jz) and summary below | Done |
-| Tested examples | `data/eval_cases.json` (20 cases), `docs/day9_test_results.md`, 221 backend tests, browser tests | Done (see honest status) |
+| Tested examples | `data/eval_cases.json` (20 cases), `docs/day9_test_results.md`, 227 backend tests, browser tests | Done (see honest status) |
 | Instructions | `README.md`, `docs/day7_google_setup.md`, `docs/day8_sending.md` | Done |
 | Start with sample emails | 35 sample emails in `data/sample_emails.json`; app runs with no Google setup | Done |
 

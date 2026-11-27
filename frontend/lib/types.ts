@@ -65,7 +65,7 @@ export interface Health {
   google_configured: boolean;
   google_connected: boolean;
   llm_configured: boolean;
-  send_mode: "mock" | "real" | "needs_permission";
+  send_mode: "mock" | "real" | "needs_permission" | "reconnect";
 }
 
 export interface AuthStatus {

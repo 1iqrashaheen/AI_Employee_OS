@@ -1,6 +1,6 @@
 # Day 9: Evaluation results
 
-Provider: `reference (scripted)` · Run date: 2026-11-26 · Cases: 20 (data/eval_cases.json)
+Provider: `reference (scripted)` · Run date: 2026-11-27 · Cases: 20 (data/eval_cases.json)
 
 > **Scripted run.** The model is replaced by stored good answers, so this run tests the pipeline (prompts, parsing, safety rules) and the checks themselves. It does **not** measure how good a real AI is. Run `python scripts/run_evaluation.py` with your own key for that.
 

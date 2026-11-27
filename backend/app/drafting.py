@@ -32,10 +32,11 @@ MAX_ORIGINAL_CHARS = 6000
 
 
 def build_user_prompt(req: DraftRequest, original: Optional[Email]) -> str:
-    parts = [f"<tone>{req.tone}</tone>"]
+    parts = [f"<tone>{req.tone.value}</tone>"]
     if req.recipient:
         # Name only helps greeting; the address itself is never needed by the model.
-        parts.append(f"<recipient_name>{req.recipient.split('<')[0].strip() or 'the recipient'}</recipient_name>")
+        name = req.recipient.split("<")[0].strip() if "<" in req.recipient else ""
+        parts.append(f"<recipient_name>{name or 'the recipient'}</recipient_name>")
     if original is not None:
         body = original.body[:MAX_ORIGINAL_CHARS]
         parts.append(

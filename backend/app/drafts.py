@@ -233,7 +233,10 @@ class DraftStore:
             return rec
 
     def finish_send(self, draft_id: str, delivery_id: Optional[str], account: Optional[str]) -> DraftRecord:
-        """The email was delivered: record it. Always marks sent, because the email really went out."""
+        """The email was delivered: record it. Always marks sent, because the email really went out.
+
+        If saving fails, the draft stays in the "sending" set (see block_resend) so it cannot be sent a second time.
+        """
         with self._lock:
             try:
                 data = self._read()
@@ -245,9 +248,16 @@ class DraftStore:
                 self._log(rec, f"Sent through Gmail{' from ' + account if account else ''}")
                 data[rec.id] = rec.model_dump(mode="json")
                 self._write(data)
-                return rec
-            finally:
-                self._sending.discard(draft_id)
+            except (DraftError, OSError):
+                self._sending.add(draft_id)
+                raise DraftError("Could not save the sent state.", 500)
+            self._sending.discard(draft_id)
+            return rec
+
+    def block_resend(self, draft_id: str) -> None:
+        """Keep a draft locked (until restart) when its email went out but the saved state could not be updated."""
+        with self._lock:
+            self._sending.add(draft_id)
 
     def abort_send(self, draft_id: str, note: str) -> None:
         """The send did not complete. The draft stays approved; the reason goes into its history."""

@@ -27,7 +27,7 @@ const messageOf = (e: unknown) => (e instanceof Error ? e.message : "Something w
 export default function Compose(props: {
   replyTo: Email | null;
   initialDraft: DraftRecord | null;
-  sendMode: "mock" | "real" | "needs_permission" | null;
+  sendMode: "mock" | "real" | "needs_permission" | "reconnect" | null;
   account: string | null; // the connected Gmail address, shown in the send confirmation
   onChanged: () => void;
   onSendFailed: () => void; // lets the app re-check the Gmail connection after a failed send
@@ -67,9 +67,10 @@ export default function Compose(props: {
   const recipientOk = isValidRecipient(recipient);
   const demo = props.sendMode === "mock" || props.sendMode === null;
   const needsPermission = props.sendMode === "needs_permission";
+  const needsReconnect = props.sendMode === "reconnect";
 
   const canApprove = !!record && status === "draft" && !unsaved && recipientOk && !!subject.trim() && !!body.trim() && !busy;
-  const canSend = !!record && status === "approved" && !unsaved && !busy && !needsPermission;
+  const canSend = !!record && status === "approved" && !unsaved && !busy && !needsPermission && !needsReconnect;
 
   /** Show exactly what the server stored (it trims whitespace), so "unsaved" never gets stuck on. */
   const adopt = (rec: DraftRecord) => {
@@ -363,6 +364,9 @@ export default function Compose(props: {
                       Your Gmail is connected for reading only. To send, allow the sending permission on Google&apos;s screen. This
                       draft stays approved and saved.
                     </p>
+                  )}
+                  {needsReconnect && (
+                    <p className="note">Gmail access expired. Reconnect Gmail on the Connect tab to send. This draft stays approved and saved.</p>
                   )}
                   {unsaved && <p className="note">Save or undo your edits first. Saving them removes the approval.</p>}
                 </>

@@ -64,7 +64,7 @@ curl -X POST localhost:8000/classify -H 'content-type: application/json' -d '{"e
 ## Tests and evaluation
 ```bash
 cd backend
-pytest -q                                  # 221 tests; fake Google and mock model, never the real internet
+pytest -q                                  # 227 tests; fake Google and mock model, never the real internet
 python scripts/run_evaluation.py --reference   # 20 examples, scripted good answers: checks the pipeline, no key needed
 python scripts/run_evaluation.py           # the same 20 examples against YOUR AI (writes docs/day9_evaluation_<provider>.md)
 ```

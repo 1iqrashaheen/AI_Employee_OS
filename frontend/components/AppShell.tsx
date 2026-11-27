@@ -62,7 +62,7 @@ export default function AppShell() {
   // If the connection goes away while the Gmail inbox is showing, fall back to the sample emails.
   const gmailEmail = auth?.connected ? auth.email : null;
   // demo: no Gmail connected (nothing is delivered) | needs_permission: connected for reading only | real: can send
-  const sendMode: "mock" | "real" | "needs_permission" | null = !auth ? null : !auth.connected ? "mock" : auth.can_send ? "real" : "needs_permission";
+  const sendMode: "mock" | "real" | "needs_permission" | "reconnect" | null = !auth ? null : auth.reauth_required ? "reconnect" : !auth.connected ? "mock" : auth.can_send ? "real" : "needs_permission";
   useEffect(() => {
     if (auth && !auth.connected && source === "gmail") setSource("sample");
   }, [auth, source]);
@@ -98,6 +98,11 @@ export default function AppShell() {
           {sendMode === "needs_permission" && (
             <span className="demo-pill" title="Gmail is connected for reading only. Allow sending on the Connect tab.">
               Sending not allowed yet
+            </span>
+          )}
+          {sendMode === "reconnect" && (
+            <span className="demo-pill" title="Gmail access expired. Reconnect on the Connect tab before sending.">
+              Reconnect Gmail to send
             </span>
           )}
           {sendMode === "real" && (
