@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quotation Generator</title>
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; color: #000; margin: 0; background: #fff; }
+  main { max-width: 900px; margin: 0 auto; padding: 24px 16px 60px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 24px 0 8px; border-bottom: 1px solid #000; padding-bottom: 4px; }
+  p.sub { margin: 0 0 8px; color: #444; font-size: 13px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; }
+  label { display: block; font-size: 12px; margin-bottom: 3px; }
+  input, textarea { width: 100%; box-sizing: border-box; padding: 6px; border: 1px solid #888; font: inherit; font-size: 14px; }
+  textarea { min-height: 60px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { border-bottom: 1px solid #ccc; padding: 4px; text-align: left; vertical-align: top; }
+  th { background: #e8e8e8; font-size: 12px; }
+  td.num, th.num { text-align: right; }
+  .items-wrap { overflow-x: auto; }
+  button { padding: 8px 14px; border: 1px solid #000; background: #fff; font: inherit; cursor: pointer; }
+  button.primary { background: #000; color: #fff; }
+  .totals { margin-left: auto; width: 320px; margin-top: 12px; font-size: 14px; }
+  .totals div { display: flex; justify-content: space-between; padding: 3px 0; }
+  .totals .grand { border-top: 1px solid #000; font-weight: bold; margin-top: 4px; padding-top: 6px; }
+  #msg { color: #b00020; font-size: 13px; margin-top: 8px; min-height: 18px; }
+  .row-actions { margin-top: 8px; display: flex; gap: 8px; }
+  @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Quotation Generator</h1>
+  <p class="sub">Fill in the details. Totals update as you type. Percent fields use normal percentages (5 means 5%).</p>
+
+  <h2>Quotation details</h2>
+  <div class="grid">
+    <div><label for="number">Quotation number</label><input id="number" value="Q-2026-001"></div>
+    <div><label for="date">Date</label><input id="date" type="date"></div>
+    <div><label for="currency">Currency code</label><input id="currency" value="USD"></div>
+    <div><label for="valid">Valid for (days)</label><input id="valid" type="number" min="1" value="30"></div>
+  </div>
+
+  <h2>Your company</h2>
+  <div class="grid">
+    <div><label for="cname">Company name</label><input id="cname"></div>
+    <div><label for="cemail">Email</label><input id="cemail"></div>
+    <div><label for="caddress">Address</label><input id="caddress"></div>
+    <div><label for="cphone">Phone</label><input id="cphone"></div>
+  </div>
+
+  <h2>Customer</h2>
+  <div class="grid">
+    <div><label for="uname">Contact name</label><input id="uname"></div>
+    <div><label for="ucompany">Company</label><input id="ucompany"></div>
+    <div><label for="uaddress">Address</label><input id="uaddress"></div>
+    <div><label for="uemail">Email</label><input id="uemail"></div>
+  </div>
+
+  <h2>Items</h2>
+  <div class="items-wrap">
+  <table>
+    <thead><tr><th>Description</th><th class="num" style="width:70px">Qty</th><th class="num" style="width:110px">Unit price</th>
+      <th class="num" style="width:80px">Disc. %</th><th class="num" style="width:110px">Amount</th><th style="width:60px"></th></tr></thead>
+    <tbody id="items"></tbody>
+  </table>
+  </div>
+  <div class="row-actions"><button type="button" id="addItem">Add item</button></div>
+
+  <h2>Discount and tax</h2>
+  <div class="grid">
+    <div><label for="discount">Overall discount (%)</label><input id="discount" type="number" min="0" max="100" step="any" value="0"></div>
+    <div><label for="tax">Tax rate (%)</label><input id="tax" type="number" min="0" max="100" step="any" value="0"></div>
+  </div>
+
+  <div class="totals" id="totals"></div>
+
+  <h2>Notes and terms</h2>
+  <div class="grid">
+    <div><label for="notes">Notes</label><textarea id="notes"></textarea></div>
+    <div><label for="terms">Terms and conditions</label><textarea id="terms"></textarea></div>
+  </div>
+
+  <div class="row-actions" style="margin-top:20px">
+    <button type="button" class="primary" id="download">Download PDF</button>
+    <button type="button" id="sample">Fill sample data</button>
+  </div>
+  <div id="msg"></div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const money = (n) => Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+let timer = null;
+
+function addRow(item) {
+  item = item || {};
+  const tr = document.createElement("tr");
+  tr.innerHTML =
+    '<td><input class="d" value=""></td>' +
+    '<td><input class="q num" type="number" min="0" step="any" value="1"></td>' +
+    '<td><input class="p num" type="number" min="0" step="any" value="0"></td>' +
+    '<td><input class="x num" type="number" min="0" max="100" step="any" value="0"></td>' +
+    '<td class="num amt">0.00</td>' +
+    '<td><button type="button" class="rm">Remove</button></td>';
+  tr.querySelector(".d").value = item.description || "";
+  tr.querySelector(".q").value = item.quantity ?? 1;
+  tr.querySelector(".p").value = item.unit_price ?? 0;
+  tr.querySelector(".x").value = item.discount_pct ?? 0;
+  tr.querySelector(".rm").onclick = () => { if ($("items").children.length > 1) { tr.remove(); schedule(); } };
+  $("items").appendChild(tr);
+}
+
+function payload() {
+  const items = [...$("items").children].map((tr) => ({
+    description: tr.querySelector(".d").value.trim(),
+    quantity: Number(tr.querySelector(".q").value),
+    unit_price: Number(tr.querySelector(".p").value),
+    discount: Number(tr.querySelector(".x").value) / 100,   // 5 -> 0.05
+  }));
+  return {
+    quotation_number: $("number").value.trim() || "DRAFT",
+    date: $("date").value || null,
+    valid_days: Number($("valid").value) || 30,
+    currency: $("currency").value.trim() || "USD",
+    company: { name: $("cname").value.trim() || "Company name", address: $("caddress").value.trim() || null,
+               email: $("cemail").value.trim() || null, phone: $("cphone").value.trim() || null },
+    customer: { name: $("uname").value.trim() || null, company: $("ucompany").value.trim() || null,
+                address: $("uaddress").value.trim() || null, email: $("uemail").value.trim() || null },
+    items,
+    discount: Number($("discount").value) / 100,
+    tax_rate: Number($("tax").value) / 100,
+    notes: $("notes").value.trim() || null,
+    terms: $("terms").value.trim() || null,
+  };
+}
+
+async function errorText(res) {
+  try {
+    const body = await res.json();
+    if (typeof body.detail === "string") return body.detail;
+    return body.detail.map((d) => d.loc.slice(1).join(" ") + ": " + d.msg).join("; ");
+  } catch (e) { return "Request failed (" + res.status + ")"; }
+}
+
+function percentError() {
+  const fields = [...document.querySelectorAll(".x")].map((e) => Number(e.value))
+    .concat([Number($("discount").value), Number($("tax").value)]);
+  return fields.some((v) => v < 0 || v > 100) ? "Percent values must be between 0 and 100." : "";
+}
+
+async function recalc() {
+  const cur = $("currency").value.trim() || "USD";
+  const pe = percentError();
+  if (pe) { $("msg").textContent = pe; return; }
+  try {
+    const res = await fetch("/api/quotations/calculate", { method: "POST",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload()) });
+    if (!res.ok) { $("msg").textContent = await errorText(res); return; }
+    const t = await res.json();
+    $("msg").textContent = "";
+    [...$("items").children].forEach((tr, i) => { tr.querySelector(".amt").textContent = money(t.lines[i].amount); });
+    let html = '<div><span>Subtotal</span><span>' + money(t.subtotal) + '</span></div>';
+    if (t.discount_amount) html += '<div><span>Discount</span><span>-' + money(t.discount_amount) + '</span></div>';
+    if (t.tax_amount) html += '<div><span>Tax</span><span>' + money(t.tax_amount) + '</span></div>';
+    html += '<div class="grand"><span>Total (' + cur + ')</span><span>' + money(t.total) + '</span></div>';
+    $("totals").innerHTML = html;
+  } catch (e) { $("msg").textContent = "Cannot reach the server. Is it running?"; }
+}
+
+function schedule() { clearTimeout(timer); timer = setTimeout(recalc, 250); }
+
+async function download() {
+  const pe = percentError();
+  if (pe) { $("msg").textContent = pe; return; }
+  const res = await fetch("/api/quotations/pdf", { method: "POST",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload()) });
+  if (!res.ok) { $("msg").textContent = await errorText(res); return; }
+  const blob = await res.blob();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "quotation_" + ($("number").value.trim() || "DRAFT").replace(/\s+/g, "_") + ".pdf";
+  a.click();
+  URL.revokeObjectURL(a.href);
+  $("msg").textContent = "";
+}
+
+function fillSample() {
+  const v = { number: "Q-2026-001", currency: "USD", valid: 30, cname: "Example Company", cemail: "sales@example.com",
+    caddress: "12 Main Street, Rawalpindi", cphone: "+92 300 0000000", uname: "John Smith", ucompany: "Smith Traders",
+    uaddress: "45 Market Road, Lahore", uemail: "john@smithtraders.example", discount: 2, tax: 17,
+    notes: "Prices include delivery to the customer's office.",
+    terms: "Payment due within 14 days of acceptance." };
+  Object.entries(v).forEach(([k, val]) => { $(k).value = val; });
+  $("items").innerHTML = "";
+  addRow({ description: "Business laptop 15 inch, 16 GB RAM, 512 GB SSD", quantity: 25, unit_price: 800, discount_pct: 5 });
+  addRow({ description: "Wireless mouse", quantity: 25, unit_price: 10, discount_pct: 0 });
+  schedule();
+}
+
+$("date").value = new Date().toISOString().slice(0, 10);
+$("addItem").onclick = () => { addRow(); schedule(); };
+$("download").onclick = download;
+$("sample").onclick = fillSample;
+document.querySelector("main").addEventListener("input", schedule);
+addRow();
+recalc();
+</script>
+</body>
+</html>
