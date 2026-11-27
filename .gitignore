@@ -1,0 +1,14 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+node_modules/
+.next/
+*.token.json
+data/drafts.json
+data/drafts.tmp
+data/google.token.json
+data/google.token.tmp
+data/activity.jsonl
+data/activity.tmp
