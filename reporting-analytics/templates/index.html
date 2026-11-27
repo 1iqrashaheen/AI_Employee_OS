@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Reporting and Analytics</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root { --bg:#f5f6fa; --card:#fff; --text:#1f2430; --muted:#6b7280; --accent:#5b4bdb; --border:#e5e7eb; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#14161c; --card:#1e212b; --text:#e8eaf0; --muted:#9aa1b2; --accent:#8b7dff; --border:#2c3040; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,Segoe UI,Arial,sans-serif; background:var(--bg); color:var(--text); }
+  header { padding:20px 28px; border-bottom:1px solid var(--border); background:var(--card); }
+  header h1 { margin:0; font-size:20px; }
+  header p { margin:4px 0 0; color:var(--muted); font-size:13px; }
+  main { max-width:1100px; margin:0 auto; padding:24px; display:grid; gap:20px; }
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:14px; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:18px; }
+  .kpi .label { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.05em; }
+  .kpi .value { font-size:24px; font-weight:700; margin-top:6px; }
+  .grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(380px,1fr)); gap:20px; }
+  h2 { font-size:15px; margin:0 0 12px; }
+  .ai { margin-top:12px; padding:10px 12px; border-left:3px solid var(--accent); font-size:13px; color:var(--muted); background:var(--bg); border-radius:0 8px 8px 0; }
+  .ai b { color:var(--accent); }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th,td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--border); }
+  td.n, th.n { text-align:right; }
+  .chart { position:relative; height:260px; }
+  .note { color:var(--muted); font-size:12px; margin-top:8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>AI Reporting and Analytics</h1>
+  <p>AI Employee OS &middot; Sales, expenses, customers and forecast</p>
+</header>
+<main id="app"><div class="card">Loading report&hellip;</div></main>
+
+<script>
+const fmt = n => "Rs " + Math.round(n).toLocaleString();
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const aiBox = e => `<div class="ai"><b>AI explanation:</b> ${e.text}<div class="note">Source: ${e.source}</div></div>`;
+
+fetch("/api/report").then(r => r.json()).then(d => {
+  const s = d.summary, ex = d.explanations;
+  const fc = d.forecast;
+  document.getElementById("app").innerHTML = `
+    <section class="kpis">
+      <div class="card kpi"><div class="label">Revenue</div><div class="value">${fmt(s.revenue)}</div></div>
+      <div class="card kpi"><div class="label">Expenses</div><div class="value">${fmt(s.expenses)}</div></div>
+      <div class="card kpi"><div class="label">Profit</div><div class="value">${fmt(s.profit)}</div></div>
+      <div class="card kpi"><div class="label">Margin</div><div class="value">${s.margin_pct}%</div></div>
+      <div class="card kpi"><div class="label">Unpaid</div><div class="value">${fmt(s.unpaid)}</div></div>
+    </section>
+    <section class="card"><h2>Overview</h2>${aiBox(ex.summary)}</section>
+    <section class="card"><h2>Monthly revenue, expenses and profit</h2>
+      <div class="chart"><canvas id="c1"></canvas></div>${aiBox(ex.monthly)}</section>
+    <section class="grid2">
+      <div class="card"><h2>Expenses by category</h2><div class="chart"><canvas id="c2"></canvas></div>${aiBox(ex.expenses)}</div>
+      <div class="card"><h2>Top customers</h2>
+        <table><tr><th>Customer</th><th class="n">Invoices</th><th class="n">Total</th></tr>
+        ${d.customers.map(c => `<tr><td>${c.customer}</td><td class="n">${c.invoices}</td><td class="n">${fmt(c.total)}</td></tr>`).join("")}
+        </table>${aiBox(ex.customers)}</div>
+    </section>
+    <section class="card"><h2>Revenue forecast (next 3 months)</h2>
+      <div class="chart"><canvas id="c3"></canvas></div>${aiBox(ex.forecast)}
+      <div class="note">Limitation: simple linear trend on past revenue. It does not include seasonality.</div></section>`;
+
+  const grid = css("--border"), txt = css("--muted");
+  Chart.defaults.color = txt;
+  const opts = { responsive:true, maintainAspectRatio:false, scales:{ x:{grid:{color:grid}}, y:{grid:{color:grid}} } };
+  const months = d.monthly.map(m => m.month);
+
+  new Chart("c1", { type:"bar", data:{ labels:months, datasets:[
+    {label:"Revenue", data:d.monthly.map(m=>m.revenue), backgroundColor:"#5b4bdb"},
+    {label:"Expenses", data:d.monthly.map(m=>m.expenses), backgroundColor:"#f59e0b"},
+    {label:"Profit", type:"line", data:d.monthly.map(m=>m.profit), borderColor:"#10b981", tension:.3}]}, options:opts });
+
+  new Chart("c2", { type:"doughnut", data:{ labels:d.expenses.map(e=>e.category), datasets:[
+    {data:d.expenses.map(e=>e.total), backgroundColor:["#5b4bdb","#f59e0b","#10b981","#ef4444","#06b6d4"]}]},
+    options:{responsive:true, maintainAspectRatio:false} });
+
+  if (fc.ok) {
+    const labels = months.concat(fc.forecast.map(f => f.month));
+    const actual = d.monthly.map(m => m.revenue);
+    const pad = Array(actual.length - 1).fill(null);
+    new Chart("c3", { type:"line", data:{ labels, datasets:[
+      {label:"Actual revenue", data:actual, borderColor:"#5b4bdb", tension:.3},
+      {label:"Forecast", data:pad.concat([actual[actual.length-1]], fc.forecast.map(f=>f.revenue)),
+       borderColor:"#f59e0b", borderDash:[6,4], tension:.3}]}, options:opts });
+  } else {
+    document.getElementById("c3").parentElement.innerHTML = `<div class="note">${fc.message}</div>`;
+  }
+});
+</script>
+</body>
+</html>
